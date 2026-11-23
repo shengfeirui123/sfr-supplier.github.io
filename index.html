@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reservasi Jadwal Pengiriman ke Gudang</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f4;--ink:#14213d;--muted:#5b6678;--line:#cfd6df;--ok:#1e8e5a;--full:#c8373b;--pick:#ffc20e;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Barlow,system-ui,sans-serif}
+header{background:var(--ink);color:#fff;padding:28px 20px}
+header h1{margin:0;font:700 clamp(28px,5vw,44px)/1.1 "Barlow Condensed",sans-serif;letter-spacing:.01em}
+header p{margin:6px 0 0;color:#c5cddb;max-width:60ch}
+main{max-width:960px;margin:0 auto;padding:20px;display:grid;gap:20px;grid-template-columns:1.4fr 1fr}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+section{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:18px}
+.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.nav h2{margin:0;font:700 24px "Barlow Condensed",sans-serif}
+.nav button{width:40px;height:40px;border:1px solid var(--line);background:#fff;border-radius:6px;font-size:18px;cursor:pointer}
+.nav button:disabled{opacity:.35;cursor:not-allowed}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.dow{font-size:13px;color:var(--muted);text-align:center;font-weight:600}
+.day{aspect-ratio:1/1;border:1px solid var(--line);border-radius:6px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font:inherit;color:inherit;padding:0}
+.day b{font-size:17px}.day small{font-size:11px;color:var(--ok);font-weight:600}
+.day.full{background:#f8e6e7;color:var(--full);cursor:not-allowed}.day.full small{color:var(--full)}
+.day.off{background:transparent;border-style:dashed;color:#9aa3b2;cursor:not-allowed}.day.off small{color:#9aa3b2}
+.day.sel{background:var(--pick);border-color:var(--ink);outline:2px solid var(--ink)}.day.sel small{color:var(--ink)}
+.day:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #2b6cff;outline-offset:2px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+form h2{margin:0 0 4px;font:700 24px "Barlow Condensed",sans-serif}
+.chosen{margin:0 0 14px;color:var(--muted)}
+label{display:block;font-weight:600;margin:12px 0 4px}
+input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:6px;font:inherit}
+.submit{margin-top:18px;width:100%;padding:13px;border:0;border-radius:6px;background:var(--ink);color:#fff;font:600 16px Barlow,sans-serif;cursor:pointer}
+.submit:disabled{opacity:.45;cursor:not-allowed}
+#msg{margin-top:12px;padding:10px 12px;border-radius:6px;display:none}
+#msg.ok{display:block;background:#e3f4ec;color:#145c3a}#msg.err{display:block;background:#f8e6e7;color:#8f2226}
+@media(prefers-reduced-motion:no-preference){.day{transition:background .15s}}
+.po-row{display:flex;gap:8px;margin-bottom:8px}
+.po-row input{flex:1}
+.rm{width:44px;border:1px solid var(--line);background:#fff;border-radius:6px;font-size:20px;cursor:pointer;color:var(--full)}
+.add{background:none;border:0;color:var(--ink);font:600 14px Barlow,sans-serif;text-decoration:underline;cursor:pointer;padding:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Reservasi Jadwal Pengiriman ke Gudang</h1>
+  <p>Pilih tanggal yang masih tersedia, isi nama PT dan jumlah SKU. Satu hari maksimal 9 supplier.</p>
+</header>
+<main>
+  <section aria-label="Kalender">
+    <div class="nav">
+      <button id="prev" aria-label="Bulan sebelumnya">‹</button>
+      <h2 id="title"></h2>
+      <button id="next" aria-label="Bulan berikutnya">›</button>
+    </div>
+    <div class="grid" id="dows"></div>
+    <div class="grid" id="days" style="margin-top:6px"></div>
+    <div class="legend">
+      <span><i style="background:#fff;border:1px solid var(--ok)"></i>Tersedia (sisa slot)</span>
+      <span><i style="background:#f8e6e7"></i>Penuh</span>
+      <span><i style="background:var(--pick)"></i>Dipilih</span>
+    </div>
+  </section>
+
+  <form id="form">
+    <section>
+      <h2>Data pengiriman</h2>
+      <p class="chosen" id="chosen">Pilih tanggal di kalender.</p>
+      <label for="pt">Nama PT</label>
+      <input id="pt" required maxlength="80" autocomplete="organization">
+      <label>Nomor PO</label>
+      <div id="pos"></div>
+      <button type="button" class="add" id="addPo">+ Tambah PO lain</button>
+      <label for="sku">Jumlah SKU yang dikirim</label>
+      <input id="sku" type="number" min="1" step="1" required inputmode="numeric">
+      <button class="submit" id="btn" disabled>Reservasi tanggal ini</button>
+      <div id="msg" role="status"></div>
+    </section>
+  </form>
+</main>
+
+<script>
+// Ganti dengan URL Web App dari Google Apps Script (lihat panduan)
+const API_URL = "https://script.google.com/macros/s/AKfycbxh7X2lVaOmg3T8kkHGJpkCsb7m6Is_nLPwjCLFHWvxQVxqh6sKfaj99-zjbOVLLAuvaQ/exec";
+const CLOSED_DAYS = [0]; // hari tidak menerima pengiriman: 0 = Minggu, 6 = Sabtu. Kosongkan [] jika buka setiap hari.
+const MAX_MONTHS_AHEAD = 3;
+
+const $ = id => document.getElementById(id);
+const MONTHS = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const DOW = ["Sen","Sel","Rab","Kam","Jum","Sab","Min"];
+const pad = n => String(n).padStart(2, "0");
+const key = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+const now = new Date();
+const todayKey = key(now.getFullYear(), now.getMonth(), now.getDate());
+
+let view = new Date(now.getFullYear(), now.getMonth(), 1);
+let data = { max: 9, counts: {} };
+let selected = null;
+
+DOW.forEach(d => { const e = document.createElement("div"); e.className = "dow"; e.textContent = d; $("dows").appendChild(e); });
+
+function say(text, type) { const m = $("msg"); m.textContent = text; m.className = text ? type : ""; }
+
+async function load() {
+  try {
+    const r = await fetch(API_URL + "?t=" + Date.now());
+    data = await r.json();
+  } catch (e) {
+    say("Gagal memuat data slot. Muat ulang halaman atau hubungi admin.", "err");
+  }
+  render();
+}
+
+function render() {
+  const y = view.getFullYear(), m = view.getMonth();
+  $("title").textContent = `${MONTHS[m]} ${y}`;
+  const box = $("days"); box.innerHTML = "";
+  const first = (new Date(y, m, 1).getDay() + 6) % 7; // Senin = 0
+  const total = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < first; i++) box.appendChild(document.createElement("div"));
+  for (let d = 1; d <= total; d++) {
+    const k = key(y, m, d);
+    const used = data.counts[k] || 0, left = data.max - used;
+    const dow = new Date(y, m, d).getDay();
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "day";
+    const n = document.createElement("b"); n.textContent = d;
+    const s = document.createElement("small");
+    if (k < todayKey || CLOSED_DAYS.includes(dow)) { b.classList.add("off"); b.disabled = true; s.textContent = "tutup"; }
+    else if (left <= 0) { b.classList.add("full"); b.disabled = true; s.textContent = "penuh"; }
+    else s.textContent = `sisa ${left}`;
+    if (k === selected) b.classList.add("sel");
+    b.append(n, s);
+    b.setAttribute("aria-label", `${d} ${MONTHS[m]} ${y}, ${s.textContent}`);
+    b.onclick = () => { selected = k; say("", ""); render(); updateForm(); };
+    box.appendChild(b);
+  }
+  $("prev").disabled = (y === now.getFullYear() && m === now.getMonth());
+  const limit = new Date(now.getFullYear(), now.getMonth() + MAX_MONTHS_AHEAD, 1);
+  $("next").disabled = view >= limit;
+}
+
+function updateForm() {
+  if (!selected) return;
+  const [y, m, d] = selected.split("-").map(Number);
+  const left = data.max - (data.counts[selected] || 0);
+  $("chosen").textContent = `Tanggal dipilih: ${d} ${MONTHS[m - 1]} ${y} (sisa ${left} slot)`;
+  $("btn").disabled = false;
+}
+
+$("prev").onclick = () => { view = new Date(view.getFullYear(), view.getMonth() - 1, 1); render(); };
+$("next").onclick = () => { view = new Date(view.getFullYear(), view.getMonth() + 1, 1); render(); };
+
+$("form").onsubmit = async e => {
+  e.preventDefault();
+  if (!selected) return;
+  $("btn").disabled = true; say("Mengirim reservasi…", "ok");
+  try {
+    const r = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // text/plain agar tidak kena preflight CORS
+      body: JSON.stringify({ date: selected, pt: $("pt").value.trim(), po: getPos(), sku: Number($("sku").value) })
+    });
+    const res = await r.json();
+    if (res.ok) {
+      say(`Berhasil! Reservasi ${res.date} untuk ${$("pt").value.trim()} tercatat.`, "ok");
+      $("form").reset(); resetPos(); selected = null; $("chosen").textContent = "Pilih tanggal di kalender.";
+    } else {
+      say(res.error || "Reservasi gagal.", "err");
+      $("btn").disabled = false;
+    }
+  } catch (err) {
+    say("Koneksi bermasalah. Coba lagi.", "err"); $("btn").disabled = false;
+  }
+  load();
+};
+
+function addPo() {
+  const row = document.createElement("div"); row.className = "po-row";
+  const i = document.createElement("input");
+  i.maxLength = 40; i.placeholder = "Contoh: PO-12345"; i.setAttribute("aria-label", "Nomor PO");
+  row.appendChild(i);
+  if ($("pos").children.length > 0) {
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "rm"; x.textContent = "×"; x.setAttribute("aria-label", "Hapus PO");
+    x.onclick = () => row.remove();
+    row.appendChild(x);
+  }
+  $("pos").appendChild(row);
+  return i;
+}
+function resetPos() { $("pos").innerHTML = ""; addPo().required = true; }
+function getPos() {
+  const v = [...$("pos").querySelectorAll("input")].map(i => i.value.trim()).filter(Boolean);
+  return [...new Set(v)];
+}
+$("addPo").onclick = () => addPo().focus();
+
+resetPos();
+load();
+</script>
+</body>
+</html>
